@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"golang.org/x/net/context/ctxhttp"
 	"io"
 	"io/ioutil"
 	"math"
@@ -19,8 +20,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-
-	"github.com/hitlyl/net/context/ctxhttp"
 )
 
 // Token represents the credentials used to authorize
@@ -62,7 +61,16 @@ type tokenJSON struct {
 	AccessToken  string         `json:"access_token"`
 	TokenType    string         `json:"token_type"`
 	RefreshToken string         `json:"refresh_token"`
+	MagicId      string         `json:"magicId"`
+	Scope        string         `json:"scope"`
 	ExpiresIn    expirationTime `json:"expires_in"` // at least PayPal returns string, while most return number
+}
+
+type customTokenJSON struct {
+	Success bool      `json:"success"`
+	Data    tokenJSON `json:"data"`
+	Code    string    `json:"code"`
+	ErrMsg  string    `json:"errMsg"`
 }
 
 func (e *tokenJSON) expiry() (t time.Time) {
@@ -265,15 +273,15 @@ func doTokenRoundTrip(ctx context.Context, req *http.Request) (*Token, error) {
 			token.Expiry = time.Now().Add(time.Duration(expires) * time.Second)
 		}
 	default:
-		var tj tokenJSON
+		var tj customTokenJSON
 		if err = json.Unmarshal(body, &tj); err != nil {
 			return nil, err
 		}
 		token = &Token{
-			AccessToken:  tj.AccessToken,
-			TokenType:    tj.TokenType,
-			RefreshToken: tj.RefreshToken,
-			Expiry:       tj.expiry(),
+			AccessToken:  tj.Data.AccessToken,
+			TokenType:    tj.Data.TokenType,
+			RefreshToken: tj.Data.RefreshToken,
+			Expiry:       tj.Data.expiry(),
 			Raw:          make(map[string]interface{}),
 		}
 		json.Unmarshal(body, &token.Raw) // no error checks for optional fields
